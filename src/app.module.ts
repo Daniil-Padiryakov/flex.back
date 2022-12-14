@@ -5,6 +5,8 @@ import { ConfigModule } from '@nestjs/config';
 import { KnexModule } from 'nest-knexjs';
 import { ProjectModule } from './project/project.module';
 import { TodoModule } from './todo/todo.module';
+import { UserModule } from './user/user.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { TodoModule } from './todo/todo.module';
     }),
     ProjectModule,
     TodoModule,
+    UserModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
