@@ -19,6 +19,10 @@ export class UserService {
     return `This action returns all user`;
   }
 
+  async findById(id: number) {
+    return this.knex('user').where('id', id).first();
+  }
+
   async findByUsername(username: string) {
     return this.knex('user').where('username', username).first();
   }

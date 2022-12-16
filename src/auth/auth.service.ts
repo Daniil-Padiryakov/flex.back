@@ -1,5 +1,9 @@
 import * as argon2 from 'argon2';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectModel } from 'nest-knexjs';
 import { Knex } from 'knex';
 import { UserService } from '../user/user.service';
@@ -18,18 +22,16 @@ export class AuthService {
   ) {}
 
   async signUp(createUserDto: CreateUserDto): Promise<any> {
-    // Check if user exists
     const userExists = await this.usersService.findByUsername(
       createUserDto.username,
     );
+
     if (userExists) {
       throw new BadRequestException('User already exists');
     }
 
-    // Hash password
     const hash = await this.hashData(createUserDto.password);
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+
     const newUser: User = await this.usersService.create({
       ...createUserDto,
       password: hash,
@@ -37,18 +39,23 @@ export class AuthService {
 
     const tokens = await this.getTokens(newUser.id, newUser.username);
     await this.createRefreshToken(newUser.id, tokens.refreshToken);
+
     return tokens;
   }
 
   async signIn(data: AuthDto) {
-    // Check if user exists
     const user = await this.usersService.findByUsername(data.username);
+
     if (!user) throw new BadRequestException('User does not exist');
+
     const passwordMatches = await argon2.verify(user.password, data.password);
+
     if (!passwordMatches)
       throw new BadRequestException('Password is incorrect');
+
     const tokens = await this.getTokens(user.id, user.username);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
+
     return tokens;
   }
 
@@ -57,8 +64,6 @@ export class AuthService {
   }
 
   async updateToken(id: string, updateUserDto: UpdateUserDto) {
-    console.log(id);
-    console.log(updateUserDto);
     return this.knex('token').returning('*').where('user_id', id).update({
       refresh_token: updateUserDto.refresh_token,
     });
@@ -69,8 +74,6 @@ export class AuthService {
   }
 
   async createRefreshToken(userId: number, refreshToken: string) {
-    console.log(userId);
-    console.log(refreshToken);
     const hashedRefreshToken = await this.hashData(refreshToken);
     return this.knex('token')
       .insert({
@@ -82,8 +85,6 @@ export class AuthService {
   }
 
   async updateRefreshToken(userId: number, refreshToken: string) {
-    console.log(userId);
-    console.log(refreshToken);
     const hashedRefreshToken = await this.hashData(refreshToken);
     return this.knex('token').returning('*').where('user_id', userId).update({
       refresh_token: hashedRefreshToken,
@@ -118,5 +119,24 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  async refreshTokens(userId: number, refreshToken: string) {
+    const user = await this.usersService.findById(userId);
+    // todo get refresh token
+    if (!user || !user.refreshToken)
+      throw new ForbiddenException('Access Denied');
+
+    const refreshTokenMatches = await argon2.verify(
+      user.refreshToken,
+      refreshToken,
+    );
+
+    if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
+
+    const tokens = await this.getTokens(user.id, user.username);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return tokens;
   }
 }
