@@ -1,1 +1,3 @@
-export class UpdateUserDto {}
+export class UpdateUserDto {
+  readonly refresh_token: string;
+}

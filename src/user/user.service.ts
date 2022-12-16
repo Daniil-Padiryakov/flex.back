@@ -9,7 +9,10 @@ export class UserService {
   constructor(@InjectModel() private readonly knex: Knex) {}
 
   create(createUserDto: CreateUserDto) {
-    return this.knex('user').returning('*').insert(createUserDto);
+    return this.knex('user')
+      .insert(createUserDto)
+      .returning('*')
+      .then((res) => res[0]);
   }
 
   findAll() {
@@ -20,11 +23,7 @@ export class UserService {
     return this.knex('user').where('username', username).first();
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
-    return this.knex('user').returning('*').where('id', id).update({
-      updateUserDto,
-    });
-  }
+  async update(id: string, updateUserDto: UpdateUserDto) {}
 
   remove(id: number) {
     return `This action removes a #${id} user`;
