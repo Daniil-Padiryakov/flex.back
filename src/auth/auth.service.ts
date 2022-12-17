@@ -123,12 +123,16 @@ export class AuthService {
 
   async refreshTokens(userId: number, refreshToken: string) {
     const user = await this.usersService.findById(userId);
+    const refreshTokenForVerify = await this.knex('token')
+      .where('user_id', userId)
+      .first();
+
     // todo get refresh token
-    if (!user || !user.refreshToken)
+    if (!user || !refreshTokenForVerify)
       throw new ForbiddenException('Access Denied');
 
     const refreshTokenMatches = await argon2.verify(
-      user.refreshToken,
+      refreshTokenForVerify,
       refreshToken,
     );
 
