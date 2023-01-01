@@ -1,145 +1,185 @@
-import * as argon2 from 'argon2';
 import {
-  BadRequestException,
-  ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { InjectModel } from 'nest-knexjs';
-import { Knex } from 'knex';
+import { CreateUserDto } from '../user/dto/create-user.dto';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
-import { CreateUserDto } from '../user/dto/create-user.dto';
-import { AuthDto } from './dto/auth.dto';
-import { User } from '../user/entities/user.entity';
-import { UpdateUserDto } from '../user/dto/update-user.dto';
+import * as bcrypt from 'bcrypt';
+import { Knex } from 'knex';
+import { InjectModel } from 'nest-knexjs';
+import { AuthDto } from './dto/AuthDto';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel() private readonly knex: Knex,
-    private usersService: UserService,
+    private userService: UserService,
     private jwtService: JwtService,
   ) {}
 
-  async signUp(createUserDto: CreateUserDto): Promise<any> {
-    const userExists = await this.usersService.findByUsername(
-      createUserDto.username,
-    );
+  generateAccessToken = (id: number) => {
+    return this.jwtService.sign({ id });
+  };
 
-    if (userExists) {
-      throw new BadRequestException('User already exists');
+  generateRefreshToken = (id: number) => {
+    return this.jwtService.sign(
+      { id },
+      {
+        secret: process.env.ACCESS_KEY,
+        expiresIn: '30d',
+      },
+    );
+  };
+
+  validateAccessToken(token) {
+    try {
+      const userData = this.jwtService.verify(token);
+      return userData;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  validateRefreshToken(token) {
+    try {
+      const userData = this.jwtService.verify(token, {
+        secret: process.env.ACCESS_KEY,
+      });
+      return userData;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async registration(dto: CreateUserDto) {
+    const { email, password, username } = dto;
+    const candidate = await this.knex('user')
+      .where('username', username)
+      .first();
+
+    if (candidate) {
+      throw new HttpException(
+        `Пользователь с username ${username} уже существует`,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    const hash = await this.hashData(createUserDto.password);
-
-    const newUser: User = await this.usersService.create({
-      ...createUserDto,
-      password: hash,
-    });
-
-    const tokens = await this.getTokens(newUser.id, newUser.username);
-    await this.createRefreshToken(newUser.id, tokens.refreshToken);
-
-    return tokens;
-  }
-
-  async signIn(data: AuthDto) {
-    const user = await this.usersService.findByUsername(data.username);
-
-    if (!user) throw new BadRequestException('User does not exist');
-
-    const passwordMatches = await argon2.verify(user.password, data.password);
-
-    if (!passwordMatches)
-      throw new BadRequestException('Password is incorrect');
-
-    const tokens = await this.getTokens(user.id, user.username);
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
-
-    return tokens;
-  }
-
-  async logout(userId: string) {
-    return this.updateToken(userId, { refresh_token: '' });
-  }
-
-  async updateToken(id: string, updateUserDto: UpdateUserDto) {
-    return this.knex('token').returning('*').where('user_id', id).update({
-      refresh_token: updateUserDto.refresh_token,
-    });
-  }
-
-  hashData(data: string) {
-    return argon2.hash(data);
-  }
-
-  async createRefreshToken(userId: number, refreshToken: string) {
-    const hashedRefreshToken = await this.hashData(refreshToken);
-    return this.knex('token')
+    const hashPassword = await bcrypt.hash(String(password), 7);
+    const [user]: any = await this.knex('user')
+      .returning(['id', 'email', 'username'])
       .insert({
-        refresh_token: hashedRefreshToken,
-        user_id: userId,
-      })
-      .returning('*')
-      .then((res) => res[0]);
-  }
+        username,
+        email,
+        password: hashPassword,
+      });
 
-  async updateRefreshToken(userId: number, refreshToken: string) {
-    const hashedRefreshToken = await this.hashData(refreshToken);
-    return this.knex('token').returning('*').where('user_id', userId).update({
-      refresh_token: hashedRefreshToken,
-    });
-  }
+    const accessToken = this.generateAccessToken(user.id);
+    const refreshToken = this.generateRefreshToken(user.id);
 
-  async getTokens(userId: number, username: string) {
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(
-        {
-          sub: userId,
-          username,
-        },
-        {
-          secret: process.env.JWT_ACCESS_SECRET,
-          expiresIn: '15m',
-        },
-      ),
-      this.jwtService.signAsync(
-        {
-          sub: userId,
-          username,
-        },
-        {
-          secret: process.env.JWT_REFRESH_SECRET,
-          expiresIn: '7d',
-        },
-      ),
-    ]);
-
+    await this.saveToken(user.id, refreshToken);
     return {
-      accessToken,
-      refreshToken,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+      user,
     };
   }
 
-  async refreshTokens(userId: number, refreshTokenFromReq: string) {
-    const user = await this.usersService.findById(userId);
-    const { refresh_token } = await this.knex('token')
+  async login(dto: AuthDto) {
+    const { username, password } = dto;
+    const userInfo = await this.knex('user')
+      .where('username', username)
+      .first();
+
+    if (!userInfo) {
+      throw new HttpException(
+        'Пользователь с таким username не найден',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const isPassEquals = await bcrypt.compare(
+      String(password),
+      userInfo.password,
+    );
+    if (!isPassEquals) {
+      throw new UnauthorizedException({
+        message: 'Неверный пароль',
+      });
+    }
+
+    const accessToken = this.generateAccessToken(userInfo.id);
+    const refreshToken = this.generateRefreshToken(userInfo.id);
+
+    await this.saveToken(userInfo.id, refreshToken);
+
+    return {
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+      user: {
+        id: userInfo.id,
+        username: userInfo.username,
+        email: userInfo.email,
+      },
+    };
+  }
+
+  async saveToken(userId: number, refreshToken: string) {
+    const tokenData: any = await this.knex('token')
       .where('user_id', userId)
       .first();
 
-    // todo get refresh token
-    if (!user || !refresh_token) throw new ForbiddenException('Access Denied');
+    if (tokenData) {
+      return this.knex('token').where('user_id', userId).update({
+        refresh_token: refreshToken,
+      });
+    }
 
-    const refreshTokenMatches = await argon2.verify(
-      refresh_token,
-      refreshTokenFromReq,
-    );
+    return this.knex('token').insert({
+      refresh_token: refreshToken,
+      user_id: userId,
+    });
+  }
 
-    if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
+  async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException({
+        message: 'Неверный рефреш токен',
+      });
+    }
 
-    const tokens = await this.getTokens(user.id, user.username);
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    const userData = this.validateRefreshToken(refreshToken);
+    const tokenData = await this.knex('token')
+      .where('refresh_token', refreshToken)
+      .first();
 
-    return tokens;
+    if (!userData || !tokenData) {
+      throw new UnauthorizedException({
+        message: 'Неверный рефреш токен 1',
+      });
+    }
+
+    const user = await this.knex('user')
+      .where('id', userData.id)
+      .select(['id', 'username', 'email'])
+      .first();
+    console.log(user);
+    const accessToken = this.generateAccessToken(user.id);
+    const refreshToken1 = this.generateRefreshToken(user.id);
+
+    await this.saveToken(user.id, refreshToken1);
+    return {
+      tokens: {
+        accessToken,
+        refreshToken: refreshToken1,
+      },
+      user,
+    };
   }
 }

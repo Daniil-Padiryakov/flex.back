@@ -1,36 +1,44 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
-import { AuthService } from './auth.service';
+import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { CreateUserDto } from '../user/dto/create-user.dto';
-import { AuthDto } from './dto/auth.dto';
-import { AccessTokenGuard } from '../common/guards/accessToken.guard';
-import { RefreshTokenGuard } from '../common/guards/refreshToken.guard';
+import { AuthService } from './auth.service';
+import { AuthDto } from './dto/AuthDto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private authService: AuthService) {}
 
-  @Post('signup')
-  signup(@Body() createUserDto: CreateUserDto) {
-    return this.authService.signUp(createUserDto);
+  @Post('/signin')
+  async login(@Body() authDto: AuthDto, @Res({ passthrough: true }) response) {
+    const userData = await this.authService.login(authDto);
+    response.cookie('refreshToken', userData.tokens.refreshToken, {
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+    });
+    return userData;
   }
 
-  @Post('signin')
-  signin(@Body() data: AuthDto) {
-    return this.authService.signIn(data);
+  @Post('/signup')
+  async registration(
+    @Body() userDto: CreateUserDto,
+    @Res({ passthrough: true }) response,
+  ) {
+    const userData = await this.authService.registration(userDto);
+    response.cookie('refreshToken', userData.tokens.refreshToken, {
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+    });
+    return userData;
   }
 
-  @UseGuards(AccessTokenGuard)
-  @Get('logout')
-  logout(@Req() req: Request) {
-    return this.authService.logout(req.user['sub']);
-  }
-
-  @UseGuards(RefreshTokenGuard)
-  @Get('refresh')
-  refreshTokens(@Req() req: Request) {
-    const userId = req.user['sub'];
-    const refreshToken = req.user['refreshToken'];
-    return this.authService.refreshTokens(userId, refreshToken);
+  @Get('/refresh')
+  async refresh(@Req() request, @Res({ passthrough: true }) response) {
+    const { refreshToken } = request.cookies;
+    console.log(refreshToken);
+    const userData = await this.authService.refresh(refreshToken);
+    response.cookie('refreshToken', userData.tokens.refreshToken, {
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+    });
+    return userData;
   }
 }
