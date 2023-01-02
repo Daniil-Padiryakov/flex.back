@@ -68,13 +68,12 @@ export class AuthService {
     }
 
     const hashPassword = await bcrypt.hash(String(password), 7);
-    const [user]: any = await this.knex('user')
-      .returning(['id', 'email', 'username'])
-      .insert({
-        username,
-        email,
-        password: hashPassword,
-      });
+
+    const user = await this.userService.create({
+      username,
+      email,
+      password: hashPassword,
+    });
 
     const accessToken = this.generateAccessToken(user.id);
     const refreshToken = this.generateRefreshToken(user.id);

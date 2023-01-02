@@ -15,20 +15,21 @@ export class TodoService {
   ) {}
 
   async create(createTodoDto: CreateTodoDto) {
-    const { title, project_id, parent_id } = createTodoDto;
+    const { title, project_id, parent_id, user_id } = createTodoDto;
     const { id } = await this.projectService.findOne(project_id);
 
     const [createdTodo]: any = await this.knex('todo').returning('*').insert({
       title,
       project_id: id,
       parent_id,
+      user_id,
     });
     createdTodo.children = [];
     return createdTodo;
   }
 
-  async findAll() {
-    const todos = await this.knex('todo');
+  async findAll(user_id) {
+    const todos = await this.knex('todo').where('user_id', user_id);
     for (let i = 0; i < todos.length; i++) {
       todos[i].children = [];
     }

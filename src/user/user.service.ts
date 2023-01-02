@@ -3,16 +3,25 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectModel } from 'nest-knexjs';
 import { Knex } from 'knex';
+import { ProjectService } from '../project/project.service';
 
 @Injectable()
 export class UserService {
-  constructor(@InjectModel() private readonly knex: Knex) {}
+  constructor(
+    @InjectModel() private readonly knex: Knex,
+    private projectService: ProjectService,
+  ) {}
 
-  create(createUserDto: CreateUserDto) {
-    return this.knex('user')
+  async create(createUserDto: CreateUserDto) {
+    const user = await this.knex('user')
       .insert(createUserDto)
-      .returning('*')
+      .returning(['id', 'email', 'username'])
       .then((res) => res[0]);
+    const inboxProject = await this.projectService.create({
+      title: 'Inbox',
+      user_id: user.id,
+    });
+    return user;
   }
 
   findAll() {

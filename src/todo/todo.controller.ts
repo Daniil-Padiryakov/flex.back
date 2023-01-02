@@ -6,12 +6,15 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { TodoService } from './todo.service';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { UpdateIsCompletedTodoDto } from './dto/update-is-completed-todo.dto';
 import { ChangeProjectTodoDto } from './dto/change-project-todo.dto';
+import { User } from '../project/project.controller';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('todo')
 export class TodoController {
@@ -22,9 +25,10 @@ export class TodoController {
     return this.todoService.create(createTodoDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.todoService.findAll();
+  findAll(@User() user_id: number) {
+    return this.todoService.findAll(user_id);
   }
 
   @Get(':id')

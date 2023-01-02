@@ -10,16 +10,17 @@ export class ProjectService {
   constructor(@InjectModel() private readonly knex: Knex) {}
 
   async create(createProjectDto: CreateProjectDto) {
-    const { title } = createProjectDto;
+    const { title, user_id } = createProjectDto;
     const [createdProject] = await this.knex('project').returning('*').insert({
       title,
+      user_id,
     });
     return createdProject;
   }
 
-  async findAll() {
+  async findAll(user_id) {
     // const todos = await this.knex('todo');
-    const projects = await this.knex('project');
+    const projects = await this.knex('project').where('user_id', user_id);
     return projects;
     // const projectsWithTodos = projects.map((project) => {
     //   project.todos = [];
