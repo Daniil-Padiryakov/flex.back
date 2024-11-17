@@ -1,6 +1,7 @@
 import {
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,13 +10,12 @@ import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { Knex } from 'knex';
-import { InjectModel } from 'nest-knexjs';
 import { AuthDto } from './dto/AuthDto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel() private readonly knex: Knex,
+    @Inject('KnexConnection') private readonly knex: Knex,
     private userService: UserService,
     private jwtService: JwtService,
   ) {}
@@ -39,7 +39,7 @@ export class AuthService {
       const userData = this.jwtService.verify(token);
       return userData;
     } catch (e) {
-      return null;
+      return e;
     }
   }
 
@@ -50,7 +50,7 @@ export class AuthService {
       });
       return userData;
     } catch (e) {
-      return null;
+      return e;
     }
   }
 

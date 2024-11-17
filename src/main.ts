@@ -13,4 +13,5 @@ async function bootstrap() {
   app.use(cookieParser());
   await app.listen(PORT, () => console.log(`Server started on port = ${PORT}`));
 }
+
 bootstrap();

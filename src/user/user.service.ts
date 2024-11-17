@@ -1,26 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { InjectModel } from 'nest-knexjs';
+// import { UpdateUserDto } from './dto/update-user.dto';
 import { Knex } from 'knex';
-import { ProjectService } from '../project/project.service';
 
 @Injectable()
 export class UserService {
-  constructor(
-    @InjectModel() private readonly knex: Knex,
-    private projectService: ProjectService,
-  ) {}
+  constructor(@Inject('KnexConnection') private readonly knex: Knex) {}
 
   async create(createUserDto: CreateUserDto) {
     const user = await this.knex('user')
       .insert(createUserDto)
       .returning(['id', 'email', 'username'])
       .then((res) => res[0]);
-    const inboxProject = await this.projectService.create({
-      title: 'Inbox',
-      user_id: user.id,
-    });
+    // const inboxProject = await this.projectService.create({
+    //   title: 'Inbox',
+    //   user_id: user.id,
+    // });
     return user;
   }
 
@@ -36,7 +31,7 @@ export class UserService {
     return this.knex('user').where('username', username).first();
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {}
+  // async update(id: string, updateUserDto: UpdateUserDto) {}
 
   remove(id: number) {
     return `This action removes a #${id} user`;
